@@ -100,7 +100,14 @@ Avoid fake certainty. If the data only weakly supports a conclusion, say "likely
 
 ## Output Defaults
 
-Default to concise structured output unless the user asks for:
+Default to concise structured output. Prefer:
+
+- opening verdict first
+- 4 to 6 short sections total
+- 2 to 4 highlighted players instead of full-roster commentary
+- only the most explanatory fight, objective, or chat details
+
+Expand only when the user asks for:
 
 - full replay-style timeline
 - per-player deep dive
