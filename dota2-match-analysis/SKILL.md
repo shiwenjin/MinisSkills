@@ -49,9 +49,11 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 脚本行为：
 
-- 直接请求 OpenDota API 获取比赛数据
+- 优先从本地缓存读取（`{skill_parent}/cache/match_{match_id}.json`），缓存未命中时才请求 OpenDota API
+- 缓存目录默认在 skill 父级目录的 `cache/` 下，每次 API 请求成功后会更新缓存文件
 - 输出基础归一化 JSON，便于后续分析
 - 可通过 `--from-file` 使用本地原始样本
+- 可通过 `--cache-dir` 指定其他缓存目录
 - 会尝试根据 `references/hero-name-aliases.csv` 补充英雄中文名、英文名和别称
 - 可通过 `--normalized-out` 和 `--raw-out` 保存结果
 
@@ -67,10 +69,12 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 脚本行为：
 
-- 直接请求 OpenDota 玩家接口
-- 聚合 `profile`、`recentMatches`、`heroes`、`totals`、`counts`
+- 优先从本地缓存读取（`{skill_parent}/cache/player_{account_id}_{endpoint}.json`），缓存未命中时才请求 OpenDota API
+- 缓存目录默认在 skill 父级目录的 `cache/` 下，每次 API 请求成功后会更新缓存文件
+- 直接请求 OpenDota 玩家接口，聚合 `profile`、`recentMatches`、`heroes`、`totals`、`counts`
 - 输出基础归一化 JSON，便于后续生成玩家报告
 - 可通过 `--profile-file`、`--recent-matches-file`、`--heroes-file`、`--totals-file`、`--counts-file` 使用本地样本
+- 可通过 `--cache-dir` 指定其他缓存目录
 - 会尝试根据 `references/hero-name-aliases.csv` 补充常用英雄的中文名、英文名和别称
 
 如果 API 失败或账户数据缺失，明确说明无法完成玩家分析，并标记缺失模块。

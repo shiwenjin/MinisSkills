@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("account_id", help="Dota2 account ID")
     parser.add_argument(
         "--cache-dir",
-        default="cache",
+        default=str(Path(__file__).resolve().parents[1] / "cache"),
         help="Directory for raw OpenDota player payloads. Default: %(default)s",
     )
     parser.add_argument("--profile-file", help="Read raw profile JSON from a local file.")

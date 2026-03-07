@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("match_id", help="Dota2 match ID")
     parser.add_argument(
         "--cache-dir",
-        default="cache",
+        default=str(Path(__file__).resolve().parents[1] / "cache"),
         help="Directory for raw OpenDota match payloads. Default: %(default)s",
     )
     parser.add_argument(
