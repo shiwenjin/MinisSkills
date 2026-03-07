@@ -7,7 +7,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 基于单场 Dota2 对局或单个玩家账户数据生成可靠、可读的分析。先获取数据，再提炼结果、阵容、玩家表现、关键事件、比赛走势或玩家画像；不要把输出写成原始字段转抄。
 
-优先使用 `scripts/fetch_match.py` 处理比赛、使用 `scripts/fetch_player.py` 处理账户数据并生成基础归一化结果；当用户需要更深入的分析口径时，再读取 `references/analysis-guidelines.md`。英雄中英文名称和常用别称优先参考 `references/hero-name-aliases.csv`。
+优先使用 `scripts/fetch_match.py` 处理比赛、使用 `scripts/fetch_player.py` 处理账户数据并生成基础归一化结果；当用户需要更深入的分析口径时，再读取 `references/analysis-guidelines.md`。英雄中英文名称和常用别称优先参考 `references/hero-name-aliases-with-id.csv`。
 
 ## 必要输入
 
@@ -54,7 +54,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 - 输出基础归一化 JSON，便于后续分析
 - 可通过 `--from-file` 使用本地原始样本
 - 可通过 `--cache-dir` 指定其他缓存目录
-- 会尝试根据 `references/hero-name-aliases.csv` 补充英雄中文名、英文名和别称
+- 会尝试根据 `references/hero-name-aliases-with-id.csv` 补充英雄中文名、英文名和别称
 - 可通过 `--normalized-out` 和 `--raw-out` 保存结果
 
 如果请求失败、返回 404、字段严重缺失，明确告诉用户无法完成分析，并说明原因。
@@ -75,9 +75,51 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 - 输出基础归一化 JSON，便于后续生成玩家报告
 - 可通过 `--profile-file`、`--recent-matches-file`、`--heroes-file`、`--totals-file`、`--counts-file` 使用本地样本
 - 可通过 `--cache-dir` 指定其他缓存目录
-- 会尝试根据 `references/hero-name-aliases.csv` 补充常用英雄的中文名、英文名和别称
+- 会尝试根据 `references/hero-name-aliases-with-id.csv` 补充常用英雄的中文名、英文名和别称
 
 如果 API 失败或账户数据缺失，明确说明无法完成玩家分析，并标记缺失模块。
+
+### 1c. 通过 hero_id 获取英雄名称
+
+OpenDota API 返回的数据中使用 `hero_id`（数字）来标识英雄。需要将 `hero_id` 映射为可读的英雄名称。
+
+英雄映射文件位于：`references/hero-name-aliases-with-id.csv`
+
+CSV 文件格式：
+```
+Hero ID,中文官方名称,英文官方名称,常用简称 / 别称
+1,敌法师,Anti-Mage,AM、敌法
+2,斧王,Axe,FW
+...
+```
+
+在 Python 中读取映射：
+
+```python
+import csv
+
+def get_hero_by_id(hero_id):
+    """通过 hero_id 获取英雄信息"""
+    with open('references/hero-name-aliases-with-id.csv', 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row['Hero ID'] == str(hero_id):
+                return {
+                    'id': hero_id,
+                    'cn_name': row['中文官方名称'],
+                    'en_name': row['英文官方名称'],
+                    'alias': row['常用简称 / 别称']
+                }
+    return None
+
+# 使用示例
+hero = get_hero_by_id(1)  # 返回 {'id': 1, 'cn_name': '敌法师', 'en_name': 'Anti-Mage', 'alias': 'AM、敌法'}
+```
+
+注意：
+- `scripts/fetch_match.py` 和 `scripts/fetch_player.py` 脚本已内置自动填充英雄名称逻辑
+- 如需手动处理，使用上述方法从 CSV 读取映射
+- 英雄映射数据来源于 OpenDota API `https://api.opendota.com/api/heroes`
 
 ### 1c. 从玩家近期比赛中提取最近一场 `match_id`
 
