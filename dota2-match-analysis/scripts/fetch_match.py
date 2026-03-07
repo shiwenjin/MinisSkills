@@ -79,11 +79,30 @@ def load_hero_aliases(path: Path) -> dict[str, dict[str, Any]]:
             alias_list = []
             if alias_text and alias_text != "-":
                 alias_list = [item.strip() for item in alias_text.split("、") if item.strip()]
-            aliases[english_name.lower()] = {
+
+            entry = {
                 "english_name": english_name,
                 "chinese_name": (row.get("中文官方名称") or "").strip() or None,
                 "aliases": alias_list,
             }
+
+            # 添加小写空格版本作为 key（如 "queen of pain"）
+            aliases[english_name.lower()] = entry
+            # 添加下划线版本作为 key（如 "queenofpain"）
+            underscores_removed = english_name.replace(" ", "").lower()
+            if underscores_removed != english_name.lower():
+                aliases[underscores_removed] = entry
+            # 添加带下划线的版本（如 "faceless_void"），用于匹配 ability_uses
+            underscore_version = english_name.replace(" ", "_").lower()
+            if underscore_version != english_name.lower() and underscore_version != underscores_removed:
+                aliases[underscore_version] = entry
+
+            # 添加别名作为 key（如 "zuus", "skeleton_king"）
+            for alias in alias_list:
+                alias_key = alias.lower().replace(" ", "")
+                if alias_key and alias_key not in aliases:
+                    aliases[alias_key] = entry
+
     return aliases
 
 
@@ -114,6 +133,35 @@ def player_name(player: dict[str, Any]) -> str:
 
 
 def resolve_hero_name(player: dict[str, Any]) -> str | None:
+    # 优先从 ability_uses 提取英雄名（最可靠）
+    ability_uses = player.get("ability_uses") or {}
+    if ability_uses:
+        # 排除中立物品等非英雄技能
+        keys = [
+            k for k in ability_uses.keys()
+            if not k.startswith(("ability", "twin_gate", "observer", "sentry", "courier"))
+        ]
+        if not keys:
+            return None
+
+        if len(keys) == 1:
+            # 只有一个技能，格式是 "英雄名_技能名"
+            parts = keys[0].split("_")
+            if len(parts) >= 2:
+                return f"{parts[0]}_{parts[1]}"
+            return parts[0] if parts else None
+        else:
+            # 多个技能，找公共前缀
+            prefix = keys[0]
+            for k in keys[1:]:
+                while not k.startswith(prefix):
+                    prefix = prefix[:-1]
+                    if not prefix:
+                        break
+            # 去掉末尾下划线
+            return prefix.rstrip("_") if prefix else None
+
+    # 其次尝试从 OpenDota 返回的字段获取
     return (
         player.get("localized_name")
         or player.get("hero_name")
@@ -125,7 +173,19 @@ def resolve_hero_name(player: dict[str, Any]) -> str | None:
 def normalize_hero(player: dict[str, Any], hero_aliases: dict[str, dict[str, Any]]) -> dict[str, Any]:
     hero_id = player.get("hero_id")
     english_name = resolve_hero_name(player)
-    matched = hero_aliases.get(english_name.lower()) if english_name else None
+    matched = None
+
+    if english_name:
+        # 直接匹配
+        matched = hero_aliases.get(english_name.lower())
+
+        # 如果没匹配到，尝试用更短的前缀（如 "faceless_void_time" → "faceless_void"）
+        if not matched and "_" in english_name:
+            # 尝试去掉最后一部分
+            parts = english_name.rsplit("_", 1)
+            if len(parts) >= 2:
+                matched = hero_aliases.get(parts[0].lower())
+
     return {
         "hero_id": hero_id,
         "english_name": matched["english_name"] if matched else english_name,

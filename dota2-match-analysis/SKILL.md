@@ -33,7 +33,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 1. 先获取 `account_id`；如果用户没给，就先查用户记忆，记忆里没有再向用户索取
 2. 使用 `scripts/fetch_player.py {account_id}` 获取玩家数据
-3. 从 `recentMatches` 原始数据或对应缓存中提取最近一场的 `match_id`
+3. 从玩家近期比赛中提取最近一场的 `match_id`
 4. 再使用 `scripts/fetch_match.py {match_id}` 获取该场比赛详情
 5. 最后按比赛分析报告输出，不要只给玩家概况
 
@@ -41,7 +41,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 ### 1. 获取比赛数据
 
-优先使用工作区内的脚本和缓存数据，不要每次都手写 `curl`。
+使用工作区内的脚本获取比赛数据：
 
 ```bash
 /usr/bin/python3 scripts/fetch_match.py {match_id}
@@ -49,8 +49,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 脚本行为：
 
-- 优先读取 `cache/match_{match_id}.json`
-- 缓存不存在时再请求 OpenDota
+- 直接请求 OpenDota API 获取比赛数据
 - 输出基础归一化 JSON，便于后续分析
 - 可通过 `--from-file` 使用本地原始样本
 - 会尝试根据 `references/hero-name-aliases.csv` 补充英雄中文名、英文名和别称
@@ -60,7 +59,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 ### 1b. 获取玩家数据
 
-分析玩家账户时，优先使用：
+分析玩家账户时，使用：
 
 ```bash
 /usr/bin/python3 scripts/fetch_player.py {account_id}
@@ -68,8 +67,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 脚本行为：
 
-- 优先读取 `cache/player_{account_id}_*.json`
-- 缓存不存在时再请求 OpenDota 玩家接口
+- 直接请求 OpenDota 玩家接口
 - 聚合 `profile`、`recentMatches`、`heroes`、`totals`、`counts`
 - 输出基础归一化 JSON，便于后续生成玩家报告
 - 可通过 `--profile-file`、`--recent-matches-file`、`--heroes-file`、`--totals-file`、`--counts-file` 使用本地样本
@@ -84,9 +82,8 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 处理顺序：
 
 - 先运行 `scripts/fetch_player.py {account_id}`
-- 然后从 OpenDota 的 `recentMatches` 原始返回里取最近一条记录的 `match_id`
-- 如果脚本是通过缓存命中，优先检查 `cache/player_{account_id}_recent_matches.json`
-- 只有在 `recentMatches` 为空或缺少 `match_id` 时，才明确告诉用户当前拿不到最近一场比赛 ID
+- 然后从 OpenDota 的 `recentMatches` 里取最近一条记录的 `match_id`
+- 如果 `recentMatches` 为空或缺少 `match_id`，明确告诉用户当前拿不到最近一场比赛 ID
 
 默认把 `recentMatches` 的第一条视为最近一场；如果返回结果为空，不要编造比赛 ID。
 
@@ -181,7 +178,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 如果 `chat` 存在，过滤明显系统消息，只摘取少量对理解比赛有帮助或明显有趣的内容。不要把整段聊天原样倾倒给用户。
 
-除了摘录原话，还要补一小段“聊天气氛分析”，说明这些聊天更像：
+除了摘录原话，还要补一小段"聊天气氛分析"，说明这些聊天更像：
 
 - 开局互相试探
 - 优势方整活
@@ -246,7 +243,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 ## 写作要求
 
 - 先下结论，再给证据
-- 突出“为什么赢、为什么输、谁打得最好”
+- 突出"为什么赢、为什么输、谁打得最好"
 - 避免把输出写成 API 字段清单
 - 数据不足时明确说明，不要脑补
 - 除非用户要求详细版，否则默认控制篇幅，优先保留高信息量内容
@@ -255,7 +252,7 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 - 默认不输出冗长时间线、全员点评、整段聊天记录、重复数据解释
 - 比赛报告默认使用轻松、风趣、带一点解说感的语气，不要写成严肃赛后公文
 - 幽默要建立在真实数据和实际比赛走势上，不要为了搞笑硬编剧情
-- 如果有聊天记录，优先把聊天摘录和比赛走势联系起来，写出一点“场上在打，场下也在斗嘴”的感觉
+- 如果有聊天记录，优先把聊天摘录和比赛走势联系起来，写出一点"场上在打，场下也在斗嘴"的感觉
 - 可以适度使用俏皮小标题或一句话点评，但不要变成纯玩梗文
 
 ## 错误处理
