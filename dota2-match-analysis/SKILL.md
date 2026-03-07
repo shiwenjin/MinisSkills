@@ -39,199 +39,35 @@ description: 分析 Dota2 比赛或玩家数据并输出结构化复盘。适用
 
 ## 执行流程
 
-### 1. 获取比赛数据
+### 1. 获取比赛或玩家数据
 
-使用工作区内的脚本获取比赛数据：
-
+#### 分析比赛 (`match_id`)
 ```bash
-/usr/bin/python3 scripts/fetch_match.py {match_id}
+python3 scripts/fetch_match.py {match_id}
 ```
+脚本会自动处理缓存、补充英雄中文名（基于 `references/hero-name-aliases-with-id.csv`）并输出归一化 JSON。
 
-脚本行为：
-
-- 优先从本地缓存读取（`{skill_parent}/cache/match_{match_id}.json`），缓存未命中时才请求 OpenDota API
-- 缓存目录默认在 skill 父级目录的 `cache/` 下，每次 API 请求成功后会更新缓存文件
-- 输出基础归一化 JSON，便于后续分析
-- 可通过 `--from-file` 使用本地原始样本
-- 可通过 `--cache-dir` 指定其他缓存目录
-- 会尝试根据 `references/hero-name-aliases-with-id.csv` 补充英雄中文名、英文名和别称
-- 可通过 `--normalized-out` 和 `--raw-out` 保存结果
-
-如果请求失败、返回 404、字段严重缺失，明确告诉用户无法完成分析，并说明原因。
-
-### 1b. 获取玩家数据
-
-分析玩家账户时，使用：
-
+#### 分析玩家 (`account_id`)
 ```bash
-/usr/bin/python3 scripts/fetch_player.py {account_id}
+python3 scripts/fetch_player.py {account_id}
 ```
 
-脚本行为：
+#### 分析“最近一场比赛”
+如果用户未提供 `match_id` 但指定了 `account_id`（或通过记忆/询问获取），先运行玩家脚本，从 `recentMatches` 中提取最近一条的 `match_id`，再运行比赛脚本。
 
-- 优先从本地缓存读取（`{skill_parent}/cache/player_{account_id}_{endpoint}.json`），缓存未命中时才请求 OpenDota API
-- 缓存目录默认在 skill 父级目录的 `cache/` 下，每次 API 请求成功后会更新缓存文件
-- 直接请求 OpenDota 玩家接口，聚合 `profile`、`recentMatches`、`heroes`、`totals`、`counts`
-- 输出基础归一化 JSON，便于后续生成玩家报告
-- 可通过 `--profile-file`、`--recent-matches-file`、`--heroes-file`、`--totals-file`、`--counts-file` 使用本地样本
-- 可通过 `--cache-dir` 指定其他缓存目录
-- 会尝试根据 `references/hero-name-aliases-with-id.csv` 补充常用英雄的中文名、英文名和别称
+**注意**：脚本已内置英雄名称映射。如果结果中偶有中文名缺失，请参考 `references/hero-name-aliases-with-id.csv` 手动修正。
 
-如果 API 失败或账户数据缺失，明确说明无法完成玩家分析，并标记缺失模块。
+### 2. 比赛分析要点
 
-### 1c. 通过 hero_id 获取英雄名称
+确认数据完整性（`players`, `radiant_win`, `duration` 等）后，分析以下维度：
 
-OpenDota API 返回的数据中使用 `hero_id`（数字）来标识英雄。需要将 `hero_id` 映射为可读的英雄名称。
+- **概况**：胜负、时长、总人头比、比赛模式/段位。
+- **阵容**：基于 `players` 区分阵营（slot 0-4 天辉, 128-132 夜魇）。评估控制、爆发、推塔、肉山及后期能力。
+- **表现**：综合 KDA、伤害（英雄/建筑）、参战率、经济（GPM/XPM/NetWorth）和辅助数据（治疗/控制）。评选 MVP 时不要只看 KDA，要结合对局势的实际贡献。
+- **转折**：基于 `objectives` (一血/推塔/肉山) 和 `teamfights` (团战) 梳理关键节点。找出决定比赛走势的那几波团战或买活。
+- **聊天**：如有 `chat`，提取反映局势心态的关键对话，简述氛围（互喷、整活、战术交流）。
 
-英雄映射文件位于：`references/hero-name-aliases-with-id.csv`
-
-CSV 文件格式：
-```
-Hero ID,中文官方名称,英文官方名称,常用简称 / 别称
-1,敌法师,Anti-Mage,AM、敌法
-2,斧王,Axe,FW
-...
-```
-
-在 Python 中读取映射：
-
-```python
-import csv
-
-def get_hero_by_id(hero_id):
-    """通过 hero_id 获取英雄信息"""
-    with open('references/hero-name-aliases-with-id.csv', 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if row['Hero ID'] == str(hero_id):
-                return {
-                    'id': hero_id,
-                    'cn_name': row['中文官方名称'],
-                    'en_name': row['英文官方名称'],
-                    'alias': row['常用简称 / 别称']
-                }
-    return None
-
-# 使用示例
-hero = get_hero_by_id(1)  # 返回 {'id': 1, 'cn_name': '敌法师', 'en_name': 'Anti-Mage', 'alias': 'AM、敌法'}
-```
-
-注意：
-- `scripts/fetch_match.py` 和 `scripts/fetch_player.py` 脚本已内置自动填充英雄名称逻辑
-- 如需手动处理，使用上述方法从 CSV 读取映射
-- 英雄映射数据来源于 OpenDota API `https://api.opendota.com/api/heroes`
-
-### 1c. 从玩家近期比赛中提取最近一场 `match_id`
-
-当用户要看“最近一场比赛”时，不要让用户再额外提供 `match_id`，优先从玩家近期比赛数据里拿。
-
-处理顺序：
-
-- 先运行 `scripts/fetch_player.py {account_id}`
-- 然后从 OpenDota 的 `recentMatches` 里取最近一条记录的 `match_id`
-- 如果 `recentMatches` 为空或缺少 `match_id`，明确告诉用户当前拿不到最近一场比赛 ID
-
-默认把 `recentMatches` 的第一条视为最近一场；如果返回结果为空，不要编造比赛 ID。
-
-### 2. 先做完整性检查
-
-至少确认以下字段可用后再继续：
-
-- `match_id`
-- `duration`
-- `radiant_win`
-- `radiant_score`
-- `dire_score`
-- `players`
-
-如果 `players`、`objectives`、`teamfights`、`chat` 中有部分缺失，可以继续分析，但要在结果中说明哪些模块基于不完整数据。
-
-### 3. 提取比赛概况
-
-整理并解释这些信息：
-
-- 比赛结果：天辉或夜魇获胜
-- 比赛时长：换算为分钟和秒
-- 双方总击杀
-- 开始时间
-- 区域、模式、可用时的段位或房间信息
-
-不要只列字段名，要转成自然语言摘要。
-
-### 4. 分析双方阵容
-
-基于 `players` 数据区分双方：
-
-- `player_slot` 0-4 为天辉，128-132 为夜魇
-- 识别每名玩家的英雄、常用位置倾向和基础出装概况
-
-给出简短阵容判断，重点看：
-
-- 控制能力
-- 爆发与持续输出
-- 线上强度
-- 推塔与肉山能力
-- 后期成长性
-
-如果原始数据里带有英文英雄名，优先结合 `references/hero-name-aliases.csv` 输出中文名和别称；如果只有 `hero_id`，先保留 `hero_id`，不要编造映射。
-
-### 5. 评估玩家表现
-
-逐名玩家至少分析：
-
-- `kills` / `deaths` / `assists`
-- `hero_damage`
-- `tower_damage`
-- `hero_healing`
-- `total_gold` 或 `net_worth`
-- `total_xp`
-- `last_hits` / `denies`
-- `level`
-- `stuns`
-
-计算 KDA 时使用：
-
-`(kills + assists) / max(1, deaths)`
-
-不要只按 KDA 排名。综合考虑参战、经济转换、伤害贡献、推塔、控制、治疗和死亡成本，给出 1 到 3 名表现最佳玩家，并说明理由。
-
-如果需要更稳定的评价口径，读取 `references/analysis-guidelines.md` 中的玩家评估与比赛走势启发式。
-
-### 6. 提取关键事件和比赛转折
-
-优先从 `objectives`、`teamfights`、分数变化和时长节点中整理：
-
-- 一血
-- 首塔和重要建筑击杀
-- 肉山击杀
-- 信使阵亡
-- 决定比赛走向的团战或连续击杀
-
-如果数据支持，给出时间线；如果不支持，就只总结关键转折，不要伪造精确时间。
-
-### 7. 分析团战
-
-如果 `teamfights` 存在，概括：
-
-- 团战次数
-- 关键团战发生的大致阶段
-- 双方主要输出点、承伤点、治疗点
-- 哪几波团战直接改变了经济或局势
-
-不要机械罗列每一波团战，优先保留最有解释力的内容。
-
-### 8. 处理聊天记录
-
-如果 `chat` 存在，过滤明显系统消息，只摘取少量对理解比赛有帮助或明显有趣的内容。不要把整段聊天原样倾倒给用户。
-
-除了摘录原话，还要补一小段"聊天气氛分析"，说明这些聊天更像：
-
-- 开局互相试探
-- 优势方整活
-- 劣势方嘴硬或心态波动
-- 团战后情绪上头
-
-分析要轻松，但不要恶意揣测玩家人格。
+**重要**：输出前必须根据 `references/hero-name-aliases-with-id.csv` 核对所有英雄名称，确保使用的是准确的中文官方名称或玩家通用的中文别称（如“敌法”、“小黑”）。
 
 ## 输出要求
 
